@@ -1,0 +1,182 @@
+---
+title: "Clustering Spotify Tracks"
+author: "Alfan"
+date: "3/8/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+options(scipen = 10)
+```
+
+
+```{r}
+library(tidyverse)
+library(glue)
+library(lubridate)
+library(factoextra)
+library(FactoMineR)
+library(ggplot2)
+library(GGally)
+library(scales)
+```
+
+
+```{r}
+tracks <- read_csv("data/SpotifyFeatures.csv")
+```
+
+```{r}
+str(tracks)
+```
+
+```{r}
+colSums(is.na(tracks))
+```
+
+```{r}
+tracks <- tracks  %>% 
+                  mutate(genre = as.factor(genre),
+                  key = as.factor(key),
+                  genre = as.factor(str_replace_all(genre, "[[:punct:]]", "")),
+                  mode = as.factor(mode),
+                  time_signature = dmy(glue('{time_signature}/19')))
+```
+
+```{r}
+na <- which(is.na(tracks))
+tracks[na,]
+```
+
+```{r}
+tracks <- drop_na(tracks)
+```
+
+```{r}
+summary(tracks)
+```
+
+```{r}
+ggcorr(tracks, low = "blue", high = "red")
+```
+
+
+```{r}
+genre_popularity <- tracks %>% select(popularity, genre) %>% group_by(genre) %>% summarise("average_popularity" = round(mean(popularity)))
+
+ggplot(data=genre_popularity, mapping = aes(x = reorder(genre,average_popularity), y = average_popularity)) +
+  geom_col() +
+  coord_flip()
+```
+
+```{r}
+tracks <- tracks %>% filter(genre == "Pop" | genre == "Rap" | genre == "Rock" | genre == "HipHop" | genre == "Dance")
+NROW(tracks)
+```
+
+
+```{r}
+set.seed(123)
+tracks_sample <- sample_n(tracks, (nrow(tracks) * 0.01))
+NROW(tracks_sample)
+```
+
+
+```{r}
+hist(tracks_sample$popularity)
+```
+
+```{r}
+str(tracks_sample)
+```
+
+
+```{r}
+tracks_num <- tracks_sample %>% select(-c(genre,artist_name,track_name,key,mode,time_signature,track_id))
+str(tracks_num)
+```
+
+
+```{r}
+fviz_nbclust(tracks_num, kmeans, method = "wss", k.max = 15) +
+  scale_y_continuous(labels = number_format(scale = 10^(-9), big.mark = ",", suffix = " bil.")) +
+  labs(subtitle = "Elbow method")
+```
+
+```{r}
+fviz_nbclust(tracks_num, kmeans, method = "silhouette", k.max = 15) 
+```
+
+```{r}
+fviz_nbclust(tracks_num, kmeans, "gap_stat", k.max = 10) + labs(subtitle = "Gap Statistic method")
+```
+
+
+```{r}
+tracks_scale <- scale(tracks_num)
+```
+
+```{r}
+set.seed(123)
+km_tracks <-kmeans(tracks_scale, centers = 2)
+km_tracks
+```
+
+
+
+```{r}
+tracks_sample$cluster <- as.factor(km_tracks$cluster)
+tracks_sample
+```
+
+
+```{r}
+tracks_sample %>% ggplot(aes(x = duration_ms, y = popularity, color = cluster)) +
+  geom_point() +
+  theme_minimal()
+```
+
+
+```{r}
+fviz_cluster(object = km_tracks, data = tracks_scale) + 
+  theme_minimal()
+```
+
+
+
+```{r}
+non_numeric <- which(sapply(tracks_sample, negate(is.numeric)))
+
+tracks_pca <- PCA(tracks_sample,
+                  scale.unit = T,
+                  quali.sup = non_numeric,
+                  graph = F,
+                  ncp = 15)
+
+summary(tracks_pca)
+```
+
+```{r}
+fviz_eig(tracks_pca, ncp = 11, addlabels = T, main = "Variance Explained by Dimensions")
+```
+
+```{r}
+non_numeric
+```
+
+
+```{r}
+fviz_pca_ind(tracks_pca, habillage = 1)
+```
+
+```{r}
+fviz_pca_var(tracks_pca) +
+  theme_minimal()
+```
+
+```{r}
+fviz_cluster()
+```
+
+
