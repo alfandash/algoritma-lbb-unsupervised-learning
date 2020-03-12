@@ -2,7 +2,12 @@
 title: "Clustering Spotify Tracks"
 author: "Alfan"
 date: "3/8/2020"
-output: html_document
+output: 
+  html_document:
+    theme: flatly
+    toc: true
+    toc_float:
+      collapsed: true
 ---
 
 ```{r setup, include=FALSE}
@@ -10,75 +15,188 @@ knitr::opts_chunk$set(echo = TRUE)
 options(scipen = 10)
 ```
 
+# Intro
 
-```{r}
+## Background 
+
+What is spotify? Spotify is a digital music, podcast, and video streaming service that gives you access to millions of songs and other content from artists all over the world. Recently spotify is one of biggest digital music and podcast service in world. 
+
+Spotify definitely is one of tech company has very advanced technology. One of example is, each of song track have uploaded to platform, they will identified. We can get audio feature information for each track, and access very easy we can use this [Api link](https://developer.spotify.com/documentation/web-api/reference/tracks/get-audio-features/). In this case we will using spotify dataset from API from this source [kaggle](https://www.kaggle.com/zaheenhamidani/ultimate-spotify-tracks-db).
+
+We will try to analyze popularity for each track we get, based on data we will try to find there is relation from popularity with other feature or variable. We will also try to do clustering analysis using K-means method and for sure we will find try to reduction dimensionality using Principle Component Analysis (PCA)
+
+## Dataset
+
+We will use dataset we get from kaggle, can download from this source [source](https://www.kaggle.com/zaheenhamidani/ultimate-spotify-tracks-db))
+
+
+## Intial Setup and Library
+
+```{r message=FALSE}
+# Starting collection for data science
 library(tidyverse)
+# Processing string
 library(glue)
+# Processing date data type
 library(lubridate)
+# Multivariate Data Analyses
 library(factoextra)
+# Multivariate Data Analyses
 library(FactoMineR)
+# Data visualization
 library(ggplot2)
+library(viridis)
 library(GGally)
 library(scales)
 ```
 
 
-```{r}
+# Import Data
+
+The dataset we download from kaggle, we will import dataset. This dataset cotontaint audio feature from a track.
+
+```{r message=FALSE}
 tracks <- read_csv("data/SpotifyFeatures.csv")
 ```
 
+Observe structure and preview imported dataset
+
 ```{r}
-str(tracks)
+glimpse(tracks)
 ```
+
+Variable Explaination:   
+1. `genre` : Track genre   
+2. `artist_name` : Artist name   
+3. `track_name` : Title of track   
+4. `track_id` : The Spotify ID for the track.   
+5. `popularity` : Popularity rate (1-100)   
+6. `acousticness` : A confidence measure from 0.0 to 1.0 of whether the track is acoustic. 1.0 represents high confidence the track is acoustic.   
+7. `danceability` : Danceability describes how suitable a track is for dancing based on a combination of musical elements including tempo, rhythm stability, beat strength, and overall regularity. A value of 0.0 is least danceable and 1.0.   
+8. `duration_ms` : The duration of the track in milliseconds.   
+9. `energy` : 	Energy is a measure from 0.0 to 1.0 and represents a perceptual measure of intensity and activity. Typically, energetic tracks feel fast, loud, and noisy. For example, death metal has high energy, while a Bach prelude scores low on the scale.   
+10. `instrumentalness` : Predicts whether a track contains no vocals. “Ooh” and “aah” sounds are treated as instrumental in this context. Rap or spoken word tracks are clearly “vocal”. The closer the instrumentalness value is to 1.0, the greater likelihood the track contains no vocal content. Values above 0.5 are intended to represent instrumental tracks, but confidence is higher as the value approaches 1.0.   
+11. `key` : The estimated overall key of the track. Integers map to pitches using standard Pitch Class notation . E.g. 0 = C, 1 = C♯/D♭, 2 = D, and so on. If no key was detected, the value is -1.   
+12. `liveness` : 	Detects the presence of an audience in the recording. Higher liveness values represent an increased probability that the track was performed live. A value above 0.8 provides strong likelihood that the track is live.   
+13. `loudness` : The overall loudness of a track in decibels (dB). Loudness values are averaged across the entire track and are useful for comparing relative loudness of tracks.   
+14. `mode` : 	Mode indicates the modality (major or minor) of a track, the type of scale from which its melodic content is derived. Major is represented by 1 and minor is 0.   
+15. `speechiness` : Speechiness detects the presence of spoken words in a track. The more exclusively speech-like the recording (e.g. talk show, audio book, poetry), the closer to 1.0 the attribute value. Values above 0.66 describe tracks that are probably made entirely of spoken words. Values between 0.33 and 0.66 describe tracks that may contain both music and speech, either in sections or layered, including such cases as rap music. Values below 0.33 most likely represent music and other non-speech-like tracks.   
+16, `tempo` : The overall estimated tempo of a track in beats per minute (BPM). In musical terminology, tempo is the speed or pace of a given piece and derives directly from the average beat duration.   
+17. `time_signature` : 	An estimated overall time signature of a track. The time signature (meter) is a notational convention to specify how many beats are in each bar (or measure).   
+18. `valence` : A measure from 0.0 to 1.0 describing the musical positiveness conveyed by a track. Tracks with high valence sound more positive (e.g. happy, cheerful, euphoric), while tracks with low valence sound more negative (e.g. sad, depressed, angry).   
+
+# Data Wrangling
+
+First of all, we would check NA or Empty value of each variable, We didnt find any NA inside data
 
 ```{r}
 colSums(is.na(tracks))
 ```
+
+Some variable have wront type data, we need to convery the data type:
+
+* `genre` : to factor   
+* `key` : to factor   
+* `genre` : to factor   
+* `mode`: to factor
 
 ```{r}
 tracks <- tracks  %>% 
                   mutate(genre = as.factor(genre),
                   key = as.factor(key),
                   genre = as.factor(str_replace_all(genre, "[[:punct:]]", "")),
-                  mode = as.factor(mode),
-                  time_signature = dmy(glue('{time_signature}/19')))
+                  mode = as.factor(mode))
 ```
 
-```{r}
-na <- which(is.na(tracks))
-tracks[na,]
-```
 
-```{r}
-tracks <- drop_na(tracks)
-```
+Drop variable that we think didnt related with our case. In this case we prioritize variable with numerical data type.based on summary we will drop `track id`, `time_signature`, `track_name`. 
 
 ```{r}
 summary(tracks)
 ```
 
-```{r}
-ggcorr(tracks, low = "blue", high = "red")
+```{r message=FALSE}
+tracks <- tracks %>% select(-c(track_id,time_signature,track_name))
 ```
 
+# Exploratory Data Analysis
+
+From dataset we get, we found we have `genre` whish is we can group our data base on it. To make us focus on popularity variable, we would select 5 highest average genre. It can inteprate the genre have big distribution from low to highest popularity. We will visualize data: 
 
 ```{r}
 genre_popularity <- tracks %>% select(popularity, genre) %>% group_by(genre) %>% summarise("average_popularity" = round(mean(popularity)))
 
-ggplot(data=genre_popularity, mapping = aes(x = reorder(genre,average_popularity), y = average_popularity)) +
+ggplot(data=genre_popularity, mapping = aes(x = reorder(genre,average_popularity), y = average_popularity, fill = genre)) +
   geom_col() +
-  coord_flip()
+  coord_flip() +
+  theme_minimal() +
+  theme(
+    legend.position = "none",
+    
+  ) +
+  labs(
+    y = "Average popularity",
+    x = "Genre"
+  )
+  
 ```
 
+Top 5 Genre with highest average popularity is Pop, Rap, Rock, HipHop and Dance. We filter our dataset and select only this 5 genres.
+
 ```{r}
+# Filter
 tracks <- tracks %>% filter(genre == "Pop" | genre == "Rap" | genre == "Rock" | genre == "HipHop" | genre == "Dance")
+
+# Total row
 NROW(tracks)
 ```
 
+## Clustering Opportunity
+
+Before we use k-mean as method to clustering, we can use simple way to clustering some factor variable with popularity variable. Here we try to viasualize boxplot `popularity` with `key` and `genre`
+
 
 ```{r}
-set.seed(123)
-tracks_sample <- sample_n(tracks, (nrow(tracks) * 0.01))
+tracks %>% 
+  ggplot(aes(x = mode, y = popularity, fill = mode)) +
+  geom_boxplot() +
+  scale_fill_viridis(discrete = TRUE, alpha=0.6) +
+  theme_minimal()
+```
+
+```{r}
+tracks %>% 
+  ggplot(aes(x = genre, y = popularity, fill = genre)) +
+  geom_boxplot() +
+  scale_fill_viridis(discrete = TRUE, alpha=0.6) +
+  theme_minimal()
+```
+
+From both bar, we can see in general `genre` and `key` didnt have significant relation to `popularity`. Even so, there is difference in plot `popluaritu` and `genre` when track overall using Key A# popularity slighlty higher and more have stable popularity than others.  
+
+Other things, we found that Pop genre have more stable popluarity than other 4 genre. So we can consider an opinion, if producer want get more popularity in the spotify platform, we can make tracks song with Pop genre and overall key in tracks using A# key.
+
+We only visualize `genre` and `key` before, and we found each correlation with popularity even though, cant significantly which variable can significantly increase popularity. So we will try visualize other numerical variable to see correlation between them.
+
+```{r}
+ggcorr(tracks, low = "blue", high = "red")
+```
+
+It show popularity dont have strong correlation with others any numberical variable. But we found some variable have strong each other, it indicates that this dataset has multicollinearity and might not suitable for various classification algorithms.
+
+To find more interesting and undiscovered pattern in the data, we will use clustering method using the K-means. We will use Principal Component Analysis (PCA) can be performed for this data to produce non-multicollinearity data, while also reducing the dimension of the data and retaining as much as information possible. The result of this analysis can be utilized further for classification purpose with lower computation.
+
+# Data Pre-processing
+
+Since we will implement K-means method and using PCA, its we will perform pre-processing data
+
+```{r}
+hist(tracks$popularity)
+```
+
+```{r}
+set.seed(100)
+tracks_sample <- sample_n(tracks, (nrow(tracks) * 0.05))
 NROW(tracks_sample)
 ```
 
@@ -93,8 +211,13 @@ str(tracks_sample)
 
 
 ```{r}
-tracks_num <- tracks_sample %>% select(-c(genre,artist_name,track_name,key,mode,time_signature,track_id))
+tracks_num <- tracks_sample %>% select(-c(genre,artist_name,key,mode))
 str(tracks_num)
+```
+
+
+```{r}
+tracks_scale <- scale(tracks_num)
 ```
 
 
@@ -110,11 +233,6 @@ fviz_nbclust(tracks_num, kmeans, method = "silhouette", k.max = 15)
 
 ```{r}
 fviz_nbclust(tracks_num, kmeans, "gap_stat", k.max = 10) + labs(subtitle = "Gap Statistic method")
-```
-
-
-```{r}
-tracks_scale <- scale(tracks_num)
 ```
 
 ```{r}
@@ -175,8 +293,9 @@ fviz_pca_var(tracks_pca) +
   theme_minimal()
 ```
 
-```{r}
-fviz_cluster()
-```
 
+```{r}
+fviz_cluster(object = km_tracks, data = tracks_scale) + 
+  theme_minimal()
+```
 
