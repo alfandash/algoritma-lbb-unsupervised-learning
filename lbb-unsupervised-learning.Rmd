@@ -151,6 +151,12 @@ tracks <- tracks %>% filter(genre == "Pop" | genre == "Rap" | genre == "Rock" | 
 NROW(tracks)
 ```
 
+We have filtered data, we can check distribution of popularity new data. We found distribution of popularity have spike in middle of popularity is around 50.
+
+```{r}
+hist(tracks$popularity)
+```
+
 ## Clustering Opportunity
 
 Before we use k-mean as method to clustering, we can use simple way to clustering some factor variable with popularity variable. Here we try to viasualize boxplot `popularity` with `key` and `genre`
@@ -158,7 +164,7 @@ Before we use k-mean as method to clustering, we can use simple way to clusterin
 
 ```{r}
 tracks %>% 
-  ggplot(aes(x = mode, y = popularity, fill = mode)) +
+  ggplot(aes(x = key, y = popularity, fill = key)) +
   geom_boxplot() +
   scale_fill_viridis(discrete = TRUE, alpha=0.6) +
   theme_minimal()
@@ -188,11 +194,7 @@ To find more interesting and undiscovered pattern in the data, we will use clust
 
 # Data Pre-processing
 
-Since we will implement K-means method and using PCA, its we will perform pre-processing data
-
-```{r}
-hist(tracks$popularity)
-```
+Since we will implement K-means method and using PCA, its need perform pre-processing data. We didnt take all data, we will do sampling from data. So i take around 5% from data.
 
 ```{r}
 set.seed(100)
@@ -200,68 +202,146 @@ tracks_sample <- sample_n(tracks, (nrow(tracks) * 0.05))
 NROW(tracks_sample)
 ```
 
+After do sampling we check distribution of popularity. We get distribution our popularity frequency still have same pattern before we take sample.
 
 ```{r}
 hist(tracks_sample$popularity)
 ```
 
-```{r}
-str(tracks_sample)
-```
-
+Next step, we will do feature scaling.  Feature scaling is a method used to standardize the range of independent variables or features of data. In data processing, it is also known as data normalization and is generally performed during the data preprocessing step. Normalization is used when we want to bound our values between two numbers, typically, between [0,1] or [-1,1]. So we need only numerical variable to do feature scaling.
 
 ```{r}
 tracks_num <- tracks_sample %>% select(-c(genre,artist_name,key,mode))
 str(tracks_num)
 ```
 
-
 ```{r}
 tracks_scale <- scale(tracks_num)
+head(tracks_scale)
 ```
 
+# Clustering 
+
+## Find optimal number of Clusters
+
+We will try to find optimum number of cluster, in this case we will try use 3 method: Elbow Method, Sillhoute Method, and gap statistic. In the end after we get result from this 3 method, we will chose optimum clusters based on majority voting.
+
+### Elbow Method
+
+Best practice of elbow method is based on graph, we will choose are of "bend of an elbow"
 
 ```{r}
-fviz_nbclust(tracks_num, kmeans, method = "wss", k.max = 15) +
+fviz_nbclust(tracks_num, kmeans, method = "wss", k.max = 10) +
   scale_y_continuous(labels = number_format(scale = 10^(-9), big.mark = ",", suffix = " bil.")) +
   labs(subtitle = "Elbow method")
 ```
 
+We found 2 cluster is good enought since there is'nt significant decline in total within-cluster sum of squares on higher number of clusters. 
+
+### Sillhouette Method
+
+The silhouette method measures the silhouette coefficient, by calculating the mean intra-cluster distance and the mean nearest-cluster distance for each observations. We get the optimal number of clusters by choosing the number of cluster with the highest silhouette score (the peak).
+
 ```{r}
-fviz_nbclust(tracks_num, kmeans, method = "silhouette", k.max = 15) 
+fviz_nbclust(tracks_num, kmeans, method = "silhouette", k.max = 10) 
 ```
+
+Based on sillhouette method, number clusters with maximum score and considered as the optimum k-clusters is 2
+
+### Gap Statistic
+
+The gap statistic compares the total within intra-cluster variation for different values of k with their expected values under null reference distribution of the data. The estimate of the optimal clusters will be value that maximize the gap statistic.
 
 ```{r}
 fviz_nbclust(tracks_num, kmeans, "gap_stat", k.max = 10) + labs(subtitle = "Gap Statistic method")
 ```
 
+
+Based on gap statistic method, the optimal k is 1
+
+### Majority Voting for Optimium K
+
+Result of our 3 method is Elbow method k = 2, Sillhouette method k = 2, and Gap Statistic k = 1. Two of our method result is 2 we consider use this result, because if we choose k = 1, we cant analyze difference between culsters or segment.
+
+## K-Means Clustering 
+
+Here we implement optimal K from our process before, we decided using K = 2
+
 ```{r}
-set.seed(123)
+set.seed(100)
 km_tracks <-kmeans(tracks_scale, centers = 2)
 km_tracks
 ```
 
-
+based on summary, we found 1558 observence goes to cluster 1 and other 736 goes to cluster 2. So right now we have information cluster of each observation, we can join cluster vector to our sample dataset
 
 ```{r}
 tracks_sample$cluster <- as.factor(km_tracks$cluster)
-tracks_sample
+
+head(tracks_sample)
 ```
 
+## Cluster Analysis
+
+We will do analysis and exploration base on cluster we already do using k-mean. our focus is popularity, let see is there correlation between cluster with our popularity rate.
 
 ```{r}
-tracks_sample %>% ggplot(aes(x = duration_ms, y = popularity, color = cluster)) +
-  geom_point() +
+tracks_sample %>% 
+  select(cluster, popularity) %>% 
+  group_by(cluster) %>% 
+  summarise_all("mean")
+```
+
+Between cluster 1 and 2 dont have any difference on Popularity in the average. it only show little difference that cluster 2 have 0.2 popularity more higher than cluster 1. Lets take look with boxplot
+
+```{r}
+tracks_sample %>% ggplot(aes(x = cluster, y = popularity, fill = cluster)) +
+  geom_boxplot() +
   theme_minimal()
 ```
 
+Same like we analyze before, there isnt sepecific difference popularity between both clusters. So we can assume that our cluster didnt focus on popularity feature or variable. lets take look by genre
 
 ```{r}
-fviz_cluster(object = km_tracks, data = tracks_scale) + 
+
+tracks_sample %>% 
+  select(cluster, genre) %>% 
+  group_by(genre, cluster) %>% 
+  summarize(n = n()) %>% 
+  ungroup() %>%
+  spread(genre, n, fill=0)
+
+```
+
+Our cluster didnt seperate genre too. so lets take look other visualize `acousticness`
+
+```{r}
+tracks_sample %>% ggplot(aes(x = cluster, y = acousticness, fill = cluster)) +
+  geom_boxplot() +
   theme_minimal()
 ```
 
+`acousticness` is one of variable that cluster read it. so we can take look for overall variable to take look which other variable that our cluster specific different 
 
+```{r}
+tracks_sample %>%
+  select_if(is.numeric) %>% 
+  mutate(cluster = as.factor(km_tracks$cluster)) %>% 
+  group_by(cluster) %>% 
+  summarise_all("mean")
+```
+
+We can see between `Cluster 1`and `Cluster 2`  have some significant difference in feature `acousticness`, `energy`, `instrumentalness`, `liveness`, `loudness`, `energy`, `instrumentalness`, `loudness`. No matter Between cluster 1 and 2 dont have significant difference on popularity we can assume if Tracks have more patter like `Cluster 2 ` it have more chance to get better popularity
+
+
+
+# PCA
+
+Principal component analysis (PCA) is a statistical procedure that uses an orthogonal transformation to convert a set of observations of possibly correlated variables (entities each of which takes on various numerical values) into a set of values of linearly uncorrelated variables called principal components. . PCA is sensitive to the relative scaling of the original variables.
+
+## Dimensionality Reduction
+
+We will try make PCA from our sample datasets. We can see eigenvalues and percentage of variance for each dimensions. Behaviour of Eivenvalues will more larger at first PCs and will goes down sequently to the end of PCs. 
 
 ```{r}
 non_numeric <- which(sapply(tracks_sample, negate(is.numeric)))
@@ -270,32 +350,85 @@ tracks_pca <- PCA(tracks_sample,
                   scale.unit = T,
                   quali.sup = non_numeric,
                   graph = F,
-                  ncp = 15)
+                  ncp = 11)
 
 summary(tracks_pca)
 ```
+
+
+After we finish make PCA to make more easy understand we can visualize each variance captured by each dimensions.
 
 ```{r}
 fviz_eig(tracks_pca, ncp = 11, addlabels = T, main = "Variance Explained by Dimensions")
 ```
 
+We can see around 50% variances of sample data can be explained only by first 4 dimensions.
+
+Our target is to reduction feature to make more light computation, so we can target more than 80% information with minimum dimension. We can take 8 dimensions from 11 dimensions we have, because we can sum up, with only 8 dimensions we can reach more than 80% total variance can representate our dataset.
+
 ```{r}
-non_numeric
+tracks_pca_min <- data.frame(tracks_pca$ind$coord[ ,1:8]) %>% 
+  bind_cols(cluster = as.factor(tracks_sample$cluster))
+
+head(tracks_pca_min)
 ```
 
+```{r}
+pca_dimdesc<-dimdesc(tracks_pca)
+```
 
 ```{r}
-fviz_pca_ind(tracks_pca, habillage = 1)
+pca_dimdesc$Dim.1$quanti
 ```
+
+Energy and loudness 2 variables that give more contribute on PC 1. so from PC 1 we can get more information of this both variables
+
+## Individual and Variable Factor Map
+
+From the previous section, we have discussed that PCA can be combined with clustering to obtain better visualization of our clustering result, or simply to understand the pattern in our dataset. 
+
+```{r}
+fviz_cluster(object = km_tracks, data = tracks_scale) + 
+  theme_minimal()
+```
+
+The plots above are examples of individual factor map. The points in the plot resemble observations and colored by Cluster (Kernel by clustering result). Dim1 and Dim2 are PC1 and PC2 respectively, with their own share (percentage) of information from the total information of the dataset. With only this visualize we cant really understand what kind insight of this pattern. We can add other visualize Variable Factor Map
 
 ```{r}
 fviz_pca_var(tracks_pca) +
   theme_minimal()
 ```
 
+The plot above shows us that the variables are located inside the circle, meaning that we would need more that two components to represent our data perfectly. The distance between variables and the origin measures the quality of the variables on the factor map. Variables that are correlated with PC1 and PC2 are the most important in explaining the variability in the data set. Variables that do not correlated with any PC or correlated with the last dimensions are variables with low contribution and might be removed to simplify the overall analysis.
+
+Some insight we can get from Individual Factor Map and Variable Factor Map
+
+Cluster 1: tracks that have more `danceability`,`speechiness`, `valence`,`loudness`,`energy`,`tempo` and `lieveness` and it little more better `popularity` than Cluster 1
+Cluster 2: tracks have more `accousticness` `instrumentalness` and more `durations`
+
+
+## PCA Clustering
+
+PCA can also be integrated with the result of the K-means Clustering to help visualize our data in a fewer dimensions than the original features.
 
 ```{r}
-fviz_cluster(object = km_tracks, data = tracks_scale) + 
-  theme_minimal()
+fviz_pca_ind(tracks_pca, habillage = 1)
 ```
+
+
+Some insight we can get from this visualize is :   
+1. all genre have 2 different cluster   
+2. Looks from Variable Factor Map, Genre rock have chance get more smaller popularity than other 4 genre
+3. Pop and Hiphop genre with more `danceability`,`speechiness`, `valence` have more bigger chance get more better Popularity
+
+# Conclusion
+
+From the unsupervised learning analysis above, we can summarize:
+
+1. `Popularity` only have small related with other feature/variable. but have more `danceability`,`speechiness`, `valence` can help get more better `Popularity`
+2. Based on clustering, tracks that to be `Cluster 1` get more better chance to get better `Popularity` than `Cluster 2`
+3. Rock genre that typically more `loudness`,`energy`,`tempo`, `lieveness`, `instrumentalness` and `durations` looks get smaller popularity than others genre
+4. Dimensionality reduction can be performed using this dataset. To perform dimensionality reduction, we can pick PCs from a total of 11 PC according to the total information. we can target more than 80% information with minimum dimension. We can take 8 dimensions from 11 dimensions we have, because we can sum up, with only 8 dimensions we can reach more than 80% total variance can representate our dataset.
+5. The improved data set obtained from unsupervised learning (eg.PCA) can be utilized further for supervised learning (classification) or for better data visualization (high dimensional data) with various insights.
+
 
