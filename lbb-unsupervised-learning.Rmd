@@ -53,7 +53,7 @@ library(scales)
 
 # Import Data
 
-The dataset we download from kaggle, we will import dataset. This dataset cotontaint audio feature from a track.
+The dataset we download from kaggle, we will import dataset. This dataset contain audio feature from a track.
 
 ```{r message=FALSE}
 tracks <- read_csv("data/SpotifyFeatures.csv")
@@ -65,7 +65,7 @@ Observe structure and preview imported dataset
 glimpse(tracks)
 ```
 
-Variable Explaination:   
+Variable Explanation:   
 1. `genre` : Track genre   
 2. `artist_name` : Artist name   
 3. `track_name` : Title of track   
@@ -87,13 +87,13 @@ Variable Explaination:
 
 # Data Wrangling
 
-First of all, we would check NA or Empty value of each variable, We didnt find any NA inside data
+First of all, we would check NA or Empty value of each variable, We didn't find any NA inside data
 
 ```{r}
 colSums(is.na(tracks))
 ```
 
-Some variable have wront type data, we need to convery the data type:
+Some variable have wrong type data, we need to convert the data type:
 
 * `genre` : to factor   
 * `key` : to factor   
@@ -109,7 +109,7 @@ tracks <- tracks  %>%
 ```
 
 
-Drop variable that we think didnt related with our case. In this case we prioritize variable with numerical data type.based on summary we will drop `track id`, `time_signature`, `track_name`. 
+Drop variable that we think didn't related with our case. In this case we prioritize variable with numerical data type.based on summary we will drop `track id`, `time_signature`, `track_name`. 
 
 ```{r}
 summary(tracks)
@@ -121,7 +121,7 @@ tracks <- tracks %>% select(-c(track_id,time_signature,track_name))
 
 # Exploratory Data Analysis
 
-From dataset we get, we found we have `genre` whish is we can group our data base on it. To make us focus on popularity variable, we would select 5 highest average genre. It can inteprate the genre have big distribution from low to highest popularity. We will visualize data: 
+From dataset we get, we found we have `genre` whish it we can group our data base on it. To make us focus on popularity variable, we would select 5 highest average genre. It can inteprate the genre have big distribution from low to highest popularity. We will visualize data: 
 
 ```{r}
 genre_popularity <- tracks %>% select(popularity, genre) %>% group_by(genre) %>% summarise("average_popularity" = round(mean(popularity)))
@@ -428,7 +428,7 @@ From the unsupervised learning analysis above, we can summarize:
 1. `Popularity` only have small related with other feature/variable. but have more `danceability`,`speechiness`, `valence` can help get more better `Popularity`
 2. Based on clustering, tracks that to be `Cluster 1` get more better chance to get better `Popularity` than `Cluster 2`
 3. Rock genre that typically more `loudness`,`energy`,`tempo`, `lieveness`, `instrumentalness` and `durations` looks get smaller popularity than others genre
-4. Dimensionality reduction can be performed using this dataset. To perform dimensionality reduction, we can pick PCs from a total of 11 PC according to the total information. we can target more than 80% information with minimum dimension. We can take 8 dimensions from 11 dimensions we have, because we can sum up, with only 8 dimensions we can reach more than 80% total variance can representate our dataset.
+4. Dimensionality reduction can be performed using this dataset. To perform dimensionality reduction, we can pick PCs from a total of 11 PC according to the total information. we can target more than 80% information with minimum dimension. We can take 8 dimensions from 11 dimensions we have, because we can sum up, with only 8 dimensions we can reach more than 80% total variance can representative our dataset.
 5. The improved data set obtained from unsupervised learning (eg.PCA) can be utilized further for supervised learning (classification) or for better data visualization (high dimensional data) with various insights.
 
 
